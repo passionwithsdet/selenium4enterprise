@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  # Selenium Hub
+  selenium-hub:
+    image: selenium/hub:4.19.1
+    container_name: selenium-hub
+    ports:
+      - "4442:4442"
+      - "4443:4443"
+      - "4444:4444"
+    environment:
+      - GRID_MAX_SESSION=16
+      - GRID_BROWSER_TIMEOUT=300
+      - GRID_TIMEOUT=300
+      - GRID_CLEAN_UP_CYCLE=300
+      - GRID_UNREGISTER_IF_STILL_DOWN_AFTER=300
+      - GRID_NEW_SESSION_WAIT_TIMEOUT=300
+      - GRID_ENABLE_LOGGING=true
+      - GRID_LOG_LEVEL=INFO
+
+  # Chrome Node
+  chrome:
+    image: selenium/node-chrome:4.19.1
+    container_name: selenium-chrome
+    shm_size: 2gb
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_SESSIONS=4
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+      - SE_NODE_GRID_URL=http://selenium-hub:4444
+      - SE_VNC_NO_PASSWORD=1
+      - SE_VNC_VIEW_ONLY=0
+    ports:
+      - "7900:7900"
+    volumes:
+      - /dev/shm:/dev/shm
+
+  # Firefox Node
+  firefox:
+    image: selenium/node-firefox:4.19.1
+    container_name: selenium-firefox
+    shm_size: 2gb
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_SESSIONS=4
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+      - SE_NODE_GRID_URL=http://selenium-hub:4444
+      - SE_VNC_NO_PASSWORD=1
+      - SE_VNC_VIEW_ONLY=0
+    ports:
+      - "7901:7900"
+    volumes:
+      - /dev/shm:/dev/shm
+
+  # Edge Node
+  edge:
+    image: selenium/node-edge:4.19.1
+    container_name: selenium-edge
+    shm_size: 2gb
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_SESSIONS=4
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+      - SE_NODE_GRID_URL=http://selenium-hub:4444
+      - SE_VNC_NO_PASSWORD=1
+      - SE_VNC_VIEW_ONLY=0
+    ports:
+      - "7902:7900"
+    volumes:
+      - /dev/shm:/dev/shm
+
+  # Chrome Debug Node (for debugging)
+  chrome-debug:
+    image: selenium/node-chrome:4.19.1
+    container_name: selenium-chrome-debug
+    shm_size: 2gb
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_SESSIONS=1
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+      - SE_NODE_GRID_URL=http://selenium-hub:4444
+      - SE_VNC_NO_PASSWORD=1
+      - SE_VNC_VIEW_ONLY=0
+    ports:
+      - "7903:7900"
+    volumes:
+      - /dev/shm:/dev/shm
+
+networks:
+  default:
+    name: selenium-grid 
