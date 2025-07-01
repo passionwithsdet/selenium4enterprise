@@ -43,6 +43,11 @@ show_usage() {
     echo "  report          Generate and open reports"
     echo "  clean           Clean project and reports"
     echo "  setup           Setup Selenium Grid with Docker"
+    echo "  rerun-failed    Rerun failed TestNG tests using testng-failed.xml"
+    echo "  mobile          Run mobile tests (Wikipedia app)"
+    echo "  mobile-emulator Run mobile tests on emulator"
+    echo "  mobile-device   Run mobile tests on real device"
+    echo "  mobile-ios      Run mobile tests on iOS simulator"
     echo "  help            Show this help message"
     echo ""
     echo "Options:"
@@ -161,6 +166,45 @@ stop_grid() {
     print_success "Selenium Grid stopped!"
 }
 
+# Function to rerun failed tests
+rerun_failed() {
+    print_status "Rerunning failed tests using testng-failed.xml..."
+    if [ -f target/surefire-reports/testng-failed.xml ]; then
+        mvn test -DsuiteXmlFile=target/surefire-reports/testng-failed.xml
+        print_success "Rerun of failed tests completed!"
+    else
+        print_warning "No testng-failed.xml found. Run a test suite first."
+    fi
+}
+
+# Function to run mobile tests
+run_mobile() {
+    print_status "Running mobile tests (Wikipedia app)..."
+    mvn clean test -DsuiteXmlFile=testng-mobile.xml
+    print_success "Mobile tests completed!"
+}
+
+# Function to run mobile tests on emulator
+run_mobile_emulator() {
+    print_status "Running mobile tests on Android emulator..."
+    mvn clean test -DsuiteXmlFile=testng-mobile.xml -Dmobile.real.device=false -Dmobile.platform=android
+    print_success "Mobile emulator tests completed!"
+}
+
+# Function to run mobile tests on real device
+run_mobile_device() {
+    print_status "Running mobile tests on real device..."
+    mvn clean test -DsuiteXmlFile=testng-mobile.xml -Dmobile.real.device=true -Dmobile.platform=android
+    print_success "Mobile device tests completed!"
+}
+
+# Function to run mobile tests on iOS simulator
+run_mobile_ios() {
+    print_status "Running mobile tests on iOS simulator..."
+    mvn clean test -DsuiteXmlFile=testng-mobile.xml -Dmobile.real.device=false -Dmobile.platform=ios
+    print_success "Mobile iOS tests completed!"
+}
+
 # Parse command line arguments
 COMMAND=""
 BROWSER=""
@@ -170,7 +214,7 @@ HEADLESS=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        local|parallel|grid|browser|report|clean|setup|stop-grid|help)
+        local|parallel|grid|browser|report|clean|setup|stop-grid|rerun-failed|mobile|mobile-emulator|mobile-device|mobile-ios|help)
             COMMAND="$1"
             shift
             ;;
@@ -228,6 +272,21 @@ case $COMMAND in
         ;;
     stop-grid)
         stop_grid
+        ;;
+    rerun-failed)
+        rerun_failed
+        ;;
+    mobile)
+        run_mobile
+        ;;
+    mobile-emulator)
+        run_mobile_emulator
+        ;;
+    mobile-device)
+        run_mobile_device
+        ;;
+    mobile-ios)
+        run_mobile_ios
         ;;
     help|"")
         show_usage

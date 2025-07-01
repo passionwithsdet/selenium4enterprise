@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Wikipedia Mobile Test Suite" parallel="methods" thread-count="1" data-provider-thread-count="1">
+
+    <!-- Test Parameters -->
+    <parameter name="platform" value="android"/>
+    <parameter name="realDevice" value="false"/>
+    <parameter name="app" value="Wikipedia"/>
+
+    <!-- Mobile Test Groups -->
+    <test name="Wikipedia Mobile Basic Tests" parallel="methods" thread-count="1">
+        <classes>
+            <class name="tests.WikipediaMobileTest">
+                <methods>
+                    <include name="testAppLaunch"/>
+                    <include name="testSearchFunctionality"/>
+                    <include name="testArticleReading"/>
+                </methods>
+            </class>
+        </classes>
+    </test>
+
+    <test name="Wikipedia Mobile Advanced Tests" parallel="methods" thread-count="1">
+        <classes>
+            <class name="tests.WikipediaMobileTest">
+                <methods>
+                    <include name="testBookmarkArticle"/>
+                    <include name="testShareArticle"/>
+                    <include name="testLanguageSwitching"/>
+                    <include name="testNavigationMenu"/>
+                </methods>
+            </class>
+        </classes>
+    </test>
+
+    <test name="Wikipedia Mobile Performance Tests" parallel="methods" thread-count="1">
+        <classes>
+            <class name="tests.WikipediaMobileTest">
+                <methods>
+                    <include name="testAppPerformance"/>
+                    <include name="testMultipleSearches"/>
+                    <include name="testContentValidation"/>
+                </methods>
+            </class>
+        </classes>
+    </test>
+
+    <test name="Wikipedia Mobile Gesture Tests" parallel="methods" thread-count="1">
+        <classes>
+            <class name="tests.WikipediaMobileTest">
+                <methods>
+                    <include name="testGestureNavigation"/>
+                    <include name="testSearchClear"/>
+                    <include name="testOfflineFunctionality"/>
+                </methods>
+            </class>
+        </classes>
+    </test>
+
+    <!-- Listeners -->
+    <listeners>
+        <listener class-name="listeners.RetryAnalyzer"/>
+    </listeners>
+
+</suite> 

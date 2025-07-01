@@ -29,8 +29,7 @@ public class ExtentReportManager {
         }
         
         // Configure Spark Reporter
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
-        String reportFile = reportPath + "ExtentReport_" + timestamp + ".html";
+        String reportFile = reportPath + "index.html";
         
         ExtentSparkReporter sparkReporter = new ExtentSparkReporter(reportFile);
         sparkReporter.config().setTheme(Theme.DARK);

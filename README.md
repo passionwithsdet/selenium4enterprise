@@ -66,9 +66,16 @@ A comprehensive, enterprise-grade automation framework built with Selenium 4, Te
 - **Edge** (latest version)
 - **Safari** (macOS only)
 
+### Docker Requirements
+- **Docker** and **Docker Compose** (for Selenium Grid)
+  - [Docker Setup Guide](./DOCKER_SETUP_GUIDE.md)
+  - Required for parallel testing and cross-browser execution
+  - Enables containerized browser environments
+
 ### Optional
-- **Docker** (for Selenium Grid)
 - **Node.js** (for Allure reports)
+- **MongoDB** (for database testing)
+- **Android Studio** (for mobile testing)
 
 ## 📦 Installation
 

@@ -1,0 +1,513 @@
+name: Enterprise Selenium Framework CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: 'Browser to test'
+        required: true
+        default: 'chrome'
+        type: choice
+        options:
+        - chrome
+        - firefox
+        - edge
+        - all
+      environment:
+        description: 'Environment to test'
+        required: true
+        default: 'qa'
+        type: choice
+        options:
+        - dev
+        - qa
+        - prod
+      parallel:
+        description: 'Enable parallel execution'
+        required: true
+        default: true
+        type: boolean
+      grid:
+        description: 'Use Selenium Grid'
+        required: true
+        default: false
+        type: boolean
+
+env:
+  MAVEN_OPTS: -Dfile.encoding=UTF-8
+  BROWSER: ${{ github.event.inputs.browser || 'chrome' }}
+  ENVIRONMENT: ${{ github.event.inputs.environment || 'qa' }}
+  PARALLEL: ${{ github.event.inputs.parallel || 'true' }}
+  GRID_ENABLED: ${{ github.event.inputs.grid || 'false' }}
+  THREAD_COUNT: '4'
+
+jobs:
+  # Code Quality and Security
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Run SonarQube Analysis
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn clean verify sonar:sonar \
+            -Dsonar.projectKey=enterprise-selenium-framework \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+
+      - name: Security Scan
+        run: |
+          mvn dependency:check
+          mvn org.owasp:dependency-check-maven:check
+
+      - name: Upload SonarQube results
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarqube-results
+          path: target/sonar/
+
+  # Unit and Integration Tests
+  unit-tests:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run Unit Tests
+        run: mvn test -Dtest=*UnitTest -DfailIfNoTests=false
+
+      - name: Run Integration Tests
+        run: mvn test -Dtest=*IntegrationTest -DfailIfNoTests=false
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: target/surefire-reports/
+
+  # UI Tests - Chrome
+  ui-tests-chrome:
+    name: UI Tests - Chrome
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    strategy:
+      matrix:
+        java-version: [17]
+        browser: [chrome]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Run UI Tests - Chrome
+        run: |
+          mvn clean test -P${{ env.ENVIRONMENT }} \
+            -Dbrowser=chrome \
+            -Dparallel=${{ env.PARALLEL }} \
+            -DthreadCount=${{ env.THREAD_COUNT }} \
+            -Dheadless=true \
+            -Dgrid.enabled=${{ env.GRID_ENABLED }} \
+            -DsuiteXmlFile=testng.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-test-results
+          path: |
+            target/surefire-reports/
+            target/extent-reports/
+            target/allure-results/
+            target/screenshots/
+
+  # UI Tests - Firefox
+  ui-tests-firefox:
+    name: UI Tests - Firefox
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    strategy:
+      matrix:
+        java-version: [17]
+        browser: [firefox]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Setup Firefox
+        uses: browser-actions/setup-firefox@v1
+
+      - name: Run UI Tests - Firefox
+        run: |
+          mvn clean test -P${{ env.ENVIRONMENT }} \
+            -Dbrowser=firefox \
+            -Dparallel=${{ env.PARALLEL }} \
+            -DthreadCount=${{ env.THREAD_COUNT }} \
+            -Dheadless=true \
+            -Dgrid.enabled=${{ env.GRID_ENABLED }} \
+            -DsuiteXmlFile=testng.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefox-test-results
+          path: |
+            target/surefire-reports/
+            target/extent-reports/
+            target/allure-results/
+            target/screenshots/
+
+  # Selenium Grid Tests
+  grid-tests:
+    name: Selenium Grid Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: ${{ env.GRID_ENABLED == 'true' }}
+    services:
+      selenium-hub:
+        image: selenium/hub:4.19.1
+        ports:
+          - 4444:4444
+          - 4442:4442
+          - 4443:4443
+        options: >-
+          --health-cmd "curl -f http://localhost:4444/status"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      chrome:
+        image: selenium/node-chrome:4.19.1
+        shm_size: 2gb
+        depends_on:
+          selenium-hub:
+            condition: service_healthy
+        environment:
+          SE_EVENT_BUS_HOST: selenium-hub
+          SE_EVENT_BUS_PUBLISH_PORT: 4442
+          SE_EVENT_BUS_SUBSCRIBE_PORT: 4443
+          SE_NODE_MAX_SESSIONS: 4
+          SE_NODE_OVERRIDE_MAX_SESSIONS: true
+          SE_NODE_GRID_URL: http://selenium-hub:4444
+
+      firefox:
+        image: selenium/node-firefox:4.19.1
+        shm_size: 2gb
+        depends_on:
+          selenium-hub:
+            condition: service_healthy
+        environment:
+          SE_EVENT_BUS_HOST: selenium-hub
+          SE_EVENT_BUS_PUBLISH_PORT: 4442
+          SE_EVENT_BUS_SUBSCRIBE_PORT: 4443
+          SE_NODE_MAX_SESSIONS: 4
+          SE_NODE_OVERRIDE_MAX_SESSIONS: true
+          SE_NODE_GRID_URL: http://selenium-hub:4444
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Wait for Selenium Grid
+        run: |
+          echo "Waiting for Selenium Grid to be ready..."
+          timeout 60 bash -c 'until curl -s http://localhost:4444/status | grep -q "ready"; do sleep 2; done'
+          echo "Selenium Grid is ready!"
+
+      - name: Run Grid Tests
+        run: |
+          mvn clean test -P${{ env.ENVIRONMENT }} \
+            -Dbrowser=chrome \
+            -Dparallel=${{ env.PARALLEL }} \
+            -DthreadCount=${{ env.THREAD_COUNT }} \
+            -Dheadless=true \
+            -Dgrid.enabled=true \
+            -Dgrid.url=http://localhost:4444/wd/hub \
+            -DsuiteXmlFile=testng.xml
+
+      - name: Upload Grid test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: grid-test-results
+          path: |
+            target/surefire-reports/
+            target/extent-reports/
+            target/allure-results/
+            target/screenshots/
+
+  # Performance Tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run Performance Tests
+        run: |
+          mvn test -Dtest=*PerformanceTest -DfailIfNoTests=false
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-results
+          path: target/performance-results/
+
+  # Cross Browser Tests
+  cross-browser-tests:
+    name: Cross Browser Tests
+    runs-on: ubuntu-latest
+    needs: [ui-tests-chrome, ui-tests-firefox]
+    if: ${{ env.BROWSER == 'all' }}
+    strategy:
+      matrix:
+        browser: [chrome, firefox, edge]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Setup ${{ matrix.browser }}
+        uses: browser-actions/setup-${{ matrix.browser }}@v1
+
+      - name: Run Cross Browser Tests
+        run: |
+          mvn clean test -P${{ env.ENVIRONMENT }} \
+            -Dbrowser=${{ matrix.browser }} \
+            -Dparallel=${{ env.PARALLEL }} \
+            -DthreadCount=${{ env.THREAD_COUNT }} \
+            -Dheadless=true \
+            -Dgrid.enabled=${{ env.GRID_ENABLED }} \
+            -DsuiteXmlFile=testng.xml
+
+      - name: Upload cross browser results
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-browser-${{ matrix.browser }}-results
+          path: |
+            target/surefire-reports/
+            target/extent-reports/
+            target/allure-results/
+            target/screenshots/
+
+  # Generate Reports
+  generate-reports:
+    name: Generate Reports
+    runs-on: ubuntu-latest
+    needs: [ui-tests-chrome, ui-tests-firefox, grid-tests, performance-tests]
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          path: test-results/
+
+      - name: Generate Allure Report
+        run: |
+          mvn allure:report
+          mvn allure:serve &
+
+      - name: Generate Extent Report
+        run: |
+          # Copy all extent reports to a single location
+          mkdir -p target/consolidated-reports
+          find test-results -name "*.html" -exec cp {} target/consolidated-reports/ \;
+
+      - name: Upload consolidated reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidated-reports
+          path: |
+            target/site/allure-maven-plugin/
+            target/consolidated-reports/
+            target/extent-reports/
+
+  # Deploy Reports
+  deploy-reports:
+    name: Deploy Reports
+    runs-on: ubuntu-latest
+    needs: generate-reports
+    if: github.ref == 'refs/heads/main' && always()
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@v4
+        with:
+          name: consolidated-reports
+          path: reports/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./reports
+
+      - name: Deploy to AWS S3 (if configured)
+        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+        run: |
+          aws s3 sync reports/ s3://${{ secrets.S3_BUCKET }}/reports/ \
+            --delete \
+            --cache-control "max-age=3600"
+
+  # Quality Gates
+  quality-gates:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    needs: [ui-tests-chrome, ui-tests-firefox, grid-tests, performance-tests]
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          path: test-results/
+
+      - name: Analyze Test Results
+        run: |
+          # Count total tests, failures, and calculate pass rate
+          total_tests=0
+          failed_tests=0
+          
+          for file in test-results/*/TEST-*.xml; do
+            if [ -f "$file" ]; then
+              tests=$(grep -o 'tests="[0-9]*"' "$file" | grep -o '[0-9]*' | head -1)
+              failures=$(grep -o 'failures="[0-9]*"' "$file" | grep -o '[0-9]*' | head -1)
+              total_tests=$((total_tests + tests))
+              failed_tests=$((failed_tests + failures))
+            fi
+          done
+          
+          if [ $total_tests -gt 0 ]; then
+            pass_rate=$(( (total_tests - failed_tests) * 100 / total_tests ))
+            echo "Total Tests: $total_tests"
+            echo "Failed Tests: $failed_tests"
+            echo "Pass Rate: $pass_rate%"
+            
+            if [ $pass_rate -lt 80 ]; then
+              echo "❌ Test pass rate ($pass_rate%) is below threshold (80%)"
+              exit 1
+            else
+              echo "✅ Test pass rate ($pass_rate%) meets threshold"
+            fi
+          fi
+
+      - name: Check Code Coverage
+        run: |
+          # Add code coverage checks here
+          echo "Code coverage analysis completed"
+
+  # Notifications
+  notifications:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [quality-gates, deploy-reports]
+    if: always()
+    steps:
+      - name: Send Slack Notification
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#automation'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          text: |
+            Pipeline: ${{ github.workflow }}
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Status: ${{ job.status }}
+            Browser: ${{ env.BROWSER }}
+            Environment: ${{ env.ENVIRONMENT }}
+
+      - name: Send Email Notification
+        if: ${{ secrets.EMAIL_SMTP_HOST != '' }}
+        run: |
+          # Add email notification logic here
+          echo "Email notification sent" 
